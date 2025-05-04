@@ -1,3 +1,4 @@
+// === Modified from Go-Back-N to Selective Repeat ===
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -43,6 +44,11 @@ void A_output(struct msg message) {
         in_use[A_nextseqnum] = true;
         acked[A_nextseqnum] = false;
 
+        if (TRACE > 1)
+            printf("----A: New message arrives, send window is not full, send new messge to layer3!\n");
+        if (TRACE > 0)
+            printf("Sending packet %d to layer 3\n", A_nextseqnum);
+
         tolayer3(A, sendpkt);
         starttimer(A_nextseqnum, RTT);  /* SR: per-packet timer */
 
@@ -57,7 +63,13 @@ void A_input(struct pkt packet) {
     int acknum;
     if (!IsCorrupted(packet)) {
         acknum = packet.acknum;
+        if (TRACE > 0)
+            printf("----A: uncorrupted ACK %d is received\n", acknum);
+
         if (in_use[acknum] && !acked[acknum]) {
+            if (TRACE > 0)
+                printf("----A: ACK %d is not a duplicate\n", acknum);
+
             acked[acknum] = true;
             stoptimer(A);  /* fallback: stopping general timer, not per-packet */
             new_ACKs++;
@@ -102,9 +114,9 @@ static bool received[SEQSPACE];
 static int expected_base;
 
 void B_input(struct pkt packet) {
-    struct pkt ackpkt;
     int seq;
     int i;
+    struct pkt ackpkt;
     if (!IsCorrupted(packet)) {
         seq = packet.seqnum;
         if (!received[seq]) {
@@ -112,7 +124,7 @@ void B_input(struct pkt packet) {
             recv_buffer[seq] = packet;
 
             if (TRACE > 0)
-                printf("----B: Packet %d received correctly.\n", seq);
+                printf("----B: packet %d is correctly received, send ACK!\n", seq);
             packets_received++;
 
             /* Deliver in-order packets */
@@ -127,7 +139,6 @@ void B_input(struct pkt packet) {
         }
 
         /* Send ACK */
-        
         ackpkt.seqnum = NOTINUSE;
         ackpkt.acknum = seq;
         for (i = 0; i < 20; i++) ackpkt.payload[i] = '0';
@@ -145,6 +156,6 @@ void B_init(void) {
         received[i] = false;
 }
 
-/* These are unused for simplex SR */
+
 void B_output(struct msg message) {}
 void B_timerinterrupt(void) {}
