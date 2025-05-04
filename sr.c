@@ -50,11 +50,12 @@ void A_output(struct msg message) {
             printf("Sending packet %d to layer 3\n", A_nextseqnum);
 
         tolayer3(A, sendpkt);
-        starttimer(A_nextseqnum, RTT);  /* SR: per-packet timer */
+        starttimer(A, RTT);  /* Use single timer for emulator compatibility */
 
         A_nextseqnum = (A_nextseqnum + 1) % SEQSPACE;
     } else {
-        if (TRACE > 0) printf("----A: Send window is full. Message dropped.\n");
+        if (TRACE > 0)
+            printf("----A: New message arrives, send window is full\n");
         window_full++;
     }
 }
@@ -71,19 +72,22 @@ void A_input(struct pkt packet) {
                 printf("----A: ACK %d is not a duplicate\n", acknum);
 
             acked[acknum] = true;
-            stoptimer(A);  /* fallback: stopping general timer, not per-packet */
+            stoptimer(A);
             new_ACKs++;
 
             while (acked[base]) {
                 in_use[base] = false;
                 base = (base + 1) % SEQSPACE;
             }
+
+            if (base != A_nextseqnum) {
+                starttimer(A, RTT);
+            }
         }
         total_ACKs_received++;
     }
 }
 
-/* === Fallback timer for SR using global timer: resend first unacked === */
 void A_timerinterrupt(void) {
     int i;
     for (i = 0; i < SEQSPACE; i++) {
@@ -91,9 +95,9 @@ void A_timerinterrupt(void) {
             if (TRACE > 0)
                 printf("----A: Timeout for packet %d. Retransmitting.\n", i);
             tolayer3(A, send_buffer[i]);
-            starttimer(A, RTT);  /* fallback: single timer restart */
+            starttimer(A, RTT);
             packets_resent++;
-            break;  /* only resend first timed-out */
+            break;
         }
     }
 }
@@ -127,7 +131,6 @@ void B_input(struct pkt packet) {
                 printf("----B: packet %d is correctly received, send ACK!\n", seq);
             packets_received++;
 
-            /* Deliver in-order packets */
             while (received[expected_base]) {
                 tolayer5(B, recv_buffer[expected_base].payload);
                 received[expected_base] = false;
@@ -138,7 +141,6 @@ void B_input(struct pkt packet) {
                 printf("----B: Duplicate packet %d ignored.\n", seq);
         }
 
-        /* Send ACK */
         ackpkt.seqnum = NOTINUSE;
         ackpkt.acknum = seq;
         for (i = 0; i < 20; i++) ackpkt.payload[i] = '0';
@@ -155,7 +157,6 @@ void B_init(void) {
     for (i = 0; i < SEQSPACE; i++)
         received[i] = false;
 }
-
 
 void B_output(struct msg message) {}
 void B_timerinterrupt(void) {}
