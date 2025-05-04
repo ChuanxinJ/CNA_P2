@@ -46,15 +46,21 @@ void A_output(struct msg message) {
 
         if (TRACE > 1)
             printf("----A: New message arrives, send window is not full, send new messge to layer3!\n");
-        if (TRACE > 0)
+        if (TRACE == 1)
             printf("Sending packet %d to layer 3\n", A_nextseqnum);
 
         tolayer3(A, sendpkt);
-        starttimer(A, RTT);  /* Use single timer for emulator compatibility */
+
+        // Only start the timer if it's not already running
+        static bool timer_running = false;
+        if (!timer_running) {
+            starttimer(A, RTT);
+            timer_running = true;
+        }
 
         A_nextseqnum = (A_nextseqnum + 1) % SEQSPACE;
     } else {
-        if (TRACE > 0)
+        if (TRACE > 1)
             printf("----A: New message arrives, send window is full\n");
         window_full++;
     }
@@ -64,11 +70,11 @@ void A_input(struct pkt packet) {
     int acknum;
     if (!IsCorrupted(packet)) {
         acknum = packet.acknum;
-        if (TRACE > 0)
+        if (TRACE == 1)
             printf("----A: uncorrupted ACK %d is received\n", acknum);
 
         if (in_use[acknum] && !acked[acknum]) {
-            if (TRACE > 0)
+            if (TRACE == 1)
                 printf("----A: ACK %d is not a duplicate\n", acknum);
 
             acked[acknum] = true;
@@ -92,7 +98,7 @@ void A_timerinterrupt(void) {
     int i;
     for (i = 0; i < SEQSPACE; i++) {
         if (in_use[i] && !acked[i]) {
-            if (TRACE > 0)
+            if (TRACE == 1)
                 printf("----A: Timeout for packet %d. Retransmitting.\n", i);
             tolayer3(A, send_buffer[i]);
             starttimer(A, RTT);
@@ -127,7 +133,7 @@ void B_input(struct pkt packet) {
             received[seq] = true;
             recv_buffer[seq] = packet;
 
-            if (TRACE > 0)
+            if (TRACE == 1)
                 printf("----B: packet %d is correctly received, send ACK!\n", seq);
             packets_received++;
 
@@ -146,8 +152,8 @@ void B_input(struct pkt packet) {
         for (i = 0; i < 20; i++) ackpkt.payload[i] = '0';
         ackpkt.checksum = ComputeChecksum(ackpkt);
         tolayer3(B, ackpkt);
-    } else if (TRACE > 0) {
-        printf("----B: Corrupted packet received. Ignored.\n");
+    } else if (TRACE == 1) {
+        printf("----B: corrupted packet received, do nothing!\n");
     }
 }
 
